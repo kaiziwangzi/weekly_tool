@@ -141,13 +141,20 @@ def parse_git_repo():
     git_user_name = linecache.getline(git_author, 1).replace("\n","")
     git_user_email = linecache.getline(git_author, 2).replace("\n","")
 
+    print('正在记录本周提交日志......')
     weekly_task = create_weekly_task()
+    # 先清空任务内容
+    with open(weekly_task, 'w', encoding='UTF-8') as weekly_tasks:
+        weekly_tasks.write('')
+
+    # 写入新内容
     with open(git_repos, 'r', encoding='UTF-8') as repos:
         for repo in repos.readlines():
             repo = repo.replace("\n","")
             if is_git_repo(repo):
                 record_git_log_weekly(repo, git_user_name, git_user_email, weekly_task)
                 pass
+    
     # 发送邮件到邮箱
     send_email_to_tencent(weekly_task)
 
@@ -177,10 +184,12 @@ def record_git_log_weekly(path, git_user_name, git_user_email, weekly_task):
     读取当前仓库的一周内的 log
     '''
     try:
-        cmd = 'cd {0} && git log --all --no-merges --author="{1}\\|{2}" --pretty=format:"【task】%'.format(path, git_user_name, git_user_email) + 's 【date】%' + 'ad" --since=1.weeks --date=short'
+        cmd = 'cd {0} && git log --all --no-merges --author="{1}\\|{2}" --pretty=format:"------[ date ] %'.format(path, git_user_name, git_user_email) + 'ad \n         [ task ] %' + 's " --since=1.weeks --date=short'
         out = subprocess.check_output(cmd, shell=True).decode('utf-8')
-        with open(weekly_task, 'w', encoding='UTF-8') as logs:
-            logs.write(out + '\n')
+        if out:
+            with open(weekly_task, 'a', encoding='UTF-8') as logs:
+                project_name = '[ %s ]' % os.path.abspath(path)
+                logs.write(project_name + '\n' + out + '\n\n')
     except:
         pass
 
@@ -294,6 +303,7 @@ def send_email_to_tencent(weekly_task):
             print('Please use "wt add -e/-k [xxx]" to add a mailbox and a verification code.')
             return EnvironmentError
         
+        print('正在生成邮件内容......')
         text = ''
         # 加载文件内容
         if weekly_task:
@@ -314,15 +324,19 @@ def send_email_to_tencent(weekly_task):
 
         # 邮件标题
         msg['Subject'] = Header('周报', 'utf-8').encode()
+        print('已生成邮件内容')
 
+        print('正在登录邮箱......')
         # 服务端配置，账密登陆
         server = smtplib.SMTP(smtp_server, 25)
 
         # 登陆服务器
         server.login(from_addr, password)
 
+        print('正在发送邮件......')
         # 发送邮件及退出
         server.sendmail(from_addr, [to_addr], msg.as_string())
+        print('邮件已发送，请登录查收')
         server.quit()
         pass
     except :
